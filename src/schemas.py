@@ -24,8 +24,10 @@ class FunctionCallResult(BaseModel):
 	name: str
 	parameters: OutParameterSchema
 
-FunctionDefinitionFile = TypeAdapter(Annotated[list[FunctionDefinition], Field(min_length=1)])
+FunctionDefinitionList = Annotated[list[FunctionDefinition], Field(min_length=1)]
+FunctionDefinitionFile = TypeAdapter(FunctionDefinitionList)
 
-TestPromptFile = TypeAdapter(Annotated[list[TestPrompt], Field(min_length=1)])
+TestPromptList = Annotated[list[TestPrompt], Field(min_length=1)]
+TestPromptFile = TypeAdapter(TestPromptList)
 
 # ! Invalid data raises ValidationError
