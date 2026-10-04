@@ -13,6 +13,9 @@ class Engine:
 		self.numeric_ids = []
 		self.model = Small_LLM_Model()
 
+		#current ids sequence
+		#selected function
+
 		self.load_files(args)
 		self.load_vocab(self.model)
 	def __str__(self):
@@ -29,18 +32,19 @@ class Engine:
 		try:
 			with open(args.functions_definition, "r") as file:
 				self.tool_defs = json.loads(file.read())
-			FunctionDefinitionFile.validate_python(self.tool_defs)
+			self.tool_defs = FunctionDefinitionFile.validate_python(self.tool_defs)
 		except Exception as e:
 			print("Failed to load function definitions:", e, file=stderr)
 		#load input tests
 		try:
 			with open(args.input, "r") as file:
 				self.test_prompts = json.loads(file.read())
-			TestPromptFile.validate_python(self.test_prompts)
+			self.test_prompts = TestPromptFile.validate_python(self.test_prompts)
 		except Exception as e:
 			print("Failed to load input tests :", e, file=stderr)
 
 	def load_vocab(self, model: Small_LLM_Model):
+		ALLOWED_CHARS = set("0123456789.-")
 		vocab_path = model.get_path_to_vocab_file()
 		with open(vocab_path, "r") as file:
 			vocab = json.load(file)
@@ -48,6 +52,6 @@ class Engine:
 			token = model.decode(_id)
 			self.id_to_token[_id] = token
 			self.token_to_id[token] = _id
-			if token in "-0123456789.":
+			if token in ALLOWED_CHARS:
 				self.numeric_ids.append(_id)
 		#Pre-calculate Function Name Token Sequences

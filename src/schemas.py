@@ -8,7 +8,7 @@ class Parameter(BaseModel):
     type: ParameterType
 
 InParameterSchema = dict[str, Parameter] # name: type
-OutParameterSchema = Annotated[dict[str, ParameterValue], Field(min_length=1, max_length=1)]
+OutParameterSchema = dict[str, ParameterValue]
 
 class TestPrompt(BaseModel):
     prompt: str = Field(min_length=1, max_length=2000, strip_whitespace=True)
