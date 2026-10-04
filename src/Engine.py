@@ -11,6 +11,7 @@ class Engine:
 		self.id_to_token = {}
 		self.token_to_id = {}
 		self.numeric_ids = []
+		self.functions_token_tree = {}
 		self.model = Small_LLM_Model()
 
 		#current ids sequence
@@ -54,4 +55,11 @@ class Engine:
 			self.token_to_id[token] = _id
 			if token in ALLOWED_CHARS:
 				self.numeric_ids.append(_id)
-		#Pre-calculate Function Name Token Sequences
+		for function in self.tool_defs:
+			sequence = self.model.encode(function.name).flatten().tolist()
+			node = self.functions_token_tree
+			for item in sequence:
+				if node.get(item) == None:
+					node[item] = {}
+				node = node[item]
+			node['is_end'] = True
