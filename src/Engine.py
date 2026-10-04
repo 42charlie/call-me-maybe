@@ -2,6 +2,7 @@ import json
 import argparse
 from sys import stderr
 from llm_sdk import Small_LLM_Model
+from numpy import inner
 from src.schemas import TestPromptFile, FunctionDefinitionFile
 
 class Engine:
@@ -63,3 +64,27 @@ class Engine:
 					node[item] = {}
 				node = node[item]
 			node['is_end'] = True
+
+	def build_outer_prompt(self):
+		tools_str = FunctionDefinitionFile.dump_json(self.tool_defs).decode()
+		prompt = f"""
+You are an expert function-calling agent. Your task is to analyze the user request and select the single most appropriate tool from the available tools to satisfy it.
+
+Rules:
+1. You must respond ONLY with a valid function call.
+2. Select the function whose description and parameters best match the user's intent.
+3. Extract all required arguments from the user input and ensure their types match the parameter definitions exactly.
+4. Do not include any explanations, greetings, comments, or extra text. Output must strictly adhere to the expected format.
+
+Available Tools:
+{tools_str}
+
+Output:
+"""
+		self.prompt = self.model.encode(prompt).flatten().tolist()
+
+	def build_inner_prompt(self, test_prompt):
+		inner_prompt = '''{
+"prompt": "''' + test_prompt + '''",
+"name": "'''
+		return (self.prompt + self.model.encode(inner_prompt).flatten().tolist())
