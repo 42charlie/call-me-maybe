@@ -14,10 +14,9 @@ class Engine:
 		self.numeric_ids = []
 		self.functions_token_tree = {}
 		self.model = Small_LLM_Model()
+		self.current_func = {}
 
 		#current ids sequence
-		#selected function
-
 		self.load_files(args)
 		self.load_vocab(self.model)
 	def __str__(self):
@@ -57,17 +56,17 @@ class Engine:
 			if token in ALLOWED_CHARS:
 				self.numeric_ids.append(_id)
 		for function in self.tool_defs:
-			sequence = self.model.encode(function.name).flatten().tolist()
+			sequence = self.model.encode(function.name + '"').flatten().tolist()
 			node = self.functions_token_tree
 			for item in sequence:
 				if node.get(item) == None:
 					node[item] = {}
 				node = node[item]
-			node['is_end'] = True
+			node['func_def'] = function
 
 	def build_outer_prompt(self):
 		tools_str = FunctionDefinitionFile.dump_json(self.tool_defs).decode()
-		prompt = f"""
+		prompt = """
 You are an expert function-calling agent. Your task is to analyze the user request and select the single most appropriate tool from the available tools to satisfy it.
 
 Rules:
@@ -77,7 +76,7 @@ Rules:
 4. Do not include any explanations, greetings, comments, or extra text. Output must strictly adhere to the expected format.
 
 Available Tools:
-{tools_str}
+""" + tools_str + """
 
 Output:
 """
@@ -88,3 +87,21 @@ Output:
 "prompt": "''' + test_prompt + '''",
 "name": "'''
 		return (self.prompt + self.model.encode(inner_prompt).flatten().tolist())
+
+	def select_function(self, input_ids):
+		tree = self.functions_token_tree
+		while True:
+			if 'func_def' in tree:
+				self.current_func = tree['func_def']
+				return input_ids
+
+			valid_tokens = [k for k in tree.keys() if isinstance(k, int)]
+			logits = self.model.get_logits_from_input_ids(input_ids)
+
+			for _id in range(len(logits)):
+				if _id not in valid_tokens:
+					logits[_id] = float('-inf')
+
+			chosen = max(range(len(logits)), key=logits.__getitem__)
+			tree = tree[chosen]
+			input_ids.append(chosen)
