@@ -1,3 +1,4 @@
+from os import makedirs
 import json
 import argparse
 from sys import stderr
@@ -42,7 +43,15 @@ class Engine:
 				self.test_prompts = json.loads(file.read())
 			self.test_prompts = TestPromptFile.validate_python(self.test_prompts)
 		except Exception as e:
-			print("Failed to load input tests :", e, file=stderr)
+			print("Failed to load input tests:", e, file=stderr)
+		#create output folder
+		try:
+			makedirs(args.output[:args.output.rfind("/")])
+			with open(args.output, "w") as file:
+				pass
+		except Exception as e:
+			print("Failed to create output file:", e, file=stderr)
+		self.outfile = args.output
 
 	def load_vocab(self, model: Small_LLM_Model):
 		print("loading vocab...")
@@ -166,3 +175,10 @@ Output:
 		# close json payload
 		input_ids += self.model.encode("\n}").flatten().tolist()
 		return input_ids
+
+	def save_output(self, output):
+		try:
+			with open(self.outfile) as file:
+				file.write(output)
+		except Exception as e:
+			print("Failed to save output:", e, file=stderr)
