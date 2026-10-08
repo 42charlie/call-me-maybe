@@ -4,7 +4,7 @@ import argparse
 from sys import stderr
 from llm_sdk import Small_LLM_Model
 from src.utils import is_valid_string_token
-from src.schemas import TestPromptFile, FunctionDefinitionFile
+from src.schemas import TestPromptFile, FunctionDefinitionFile, FunctionCallResultFile
 
 class Engine:
 	def __init__(self, args):
@@ -46,7 +46,7 @@ class Engine:
 			print("Failed to load input tests:", e, file=stderr)
 		#create output folder
 		try:
-			makedirs(args.output[:args.output.rfind("/")])
+			makedirs(args.output[:args.output.rfind("/")], exist_ok=True)
 			with open(args.output, "w") as file:
 				pass
 		except Exception as e:
@@ -69,6 +69,9 @@ class Engine:
 		#maybe using token_to_id is better
 		self.comma_token_id = self.model.encode(",").flatten().tolist()[-1]
 		self.brace_token_id = self.model.encode("}").flatten().tolist()[-1]
+		self.tokens_param_open = self.model.encode(',\n"parameters": {').flatten().tolist()
+		self.tokens_json_close = self.model.encode("\n}").flatten().tolist()
+		self.tokens_comma_space = self.model.encode(", ").flatten().tolist()
 
 		for function in self.tool_defs:
 			sequence = self.model.encode(function.name + '"').flatten().tolist()
@@ -83,15 +86,7 @@ class Engine:
 		print("building outer prompt...")
 		tools_str = FunctionDefinitionFile.dump_json(self.tool_defs).decode()
 		prompt = """
-You are an expert function-calling agent. Your task is to analyze the user request and select the single most appropriate tool from the available tools to satisfy it.
-
-Rules:
-1. You must respond ONLY with a valid function call.
-2. Select the function whose description and parameters best match the user's intent.
-3. Extract all required arguments from the user input and ensure their types match the parameter definitions exactly.
-4. Do not include any explanations, greetings, comments, or extra text. Output must strictly adhere to the expected format.
-
-Available Tools:
+Tools:
 """ + tools_str + """
 
 Output:
@@ -111,8 +106,7 @@ Output:
 		while True:
 			if 'func_def' in tree:
 				self.current_func = tree['func_def']
-				input_ids += self.model.encode(''',
-"parameters": {''').flatten().tolist()
+				input_ids += self.tokens_param_open
 				return input_ids
 
 			valid_tokens = [k for k in tree.keys() if isinstance(k, int)]
@@ -159,26 +153,31 @@ Output:
 
 				#string end case with: "
 				if param_info.type == "string" and '"' in token_str:
-					input_ids += self.model.encode('"' + ("}" if is_last else ", ")).flatten().tolist()
+					input_ids.append(self.token_to_id['"'])
+					if is_last:
+						input_ids.append(self.brace_token_id)
+					else:
+						input_ids += self.tokens_comma_space
 					break
 
 				#number end case with: , or }
 				if param_info.type == "number" and chosen == sep_id:
 					input_ids.append(chosen)
 					if not is_last:
-						input_ids += self.model.encode(" ").flatten().tolist()
+						input_ids.append(self.token_to_id[' '])
 					break
 
 				input_ids.append(chosen)
 				subtoken += 1
 
 		# close json payload
-		input_ids += self.model.encode("\n}").flatten().tolist()
+		input_ids += self.tokens_json_close
 		return input_ids
 
 	def save_output(self, output):
 		try:
-			with open(self.outfile) as file:
-				file.write(output)
+			json_bytes = FunctionCallResultFile.dump_json(output, indent=2)
+			with open(self.outfile, "wb") as file:
+				file.write(json_bytes)
 		except Exception as e:
 			print("Failed to save output:", e, file=stderr)

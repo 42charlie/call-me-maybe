@@ -1,14 +1,10 @@
 from typing import Literal, Annotated
 from pydantic import BaseModel, Field, TypeAdapter
 
-ParameterType = Literal["string", "number", "boolean"]
-ParameterValue = str | int | float | bool
-
 class Parameter(BaseModel):
-    type: ParameterType
+    type: Literal["string", "number", "boolean"]
 
 InParameterSchema = dict[str, Parameter] # name: type
-OutParameterSchema = dict[str, ParameterValue]
 
 class TestPrompt(BaseModel):
     prompt: str = Field(min_length=1, max_length=2000, strip_whitespace=True)
@@ -22,7 +18,10 @@ class FunctionDefinition(BaseModel):
 class FunctionCallResult(BaseModel):
 	prompt: str
 	name: str
-	parameters: OutParameterSchema
+	parameters: dict[str, str | float | bool]
+
+FunctionCallResultList = Annotated[list[FunctionCallResult], Field(min_length=1)]
+FunctionCallResultFile = TypeAdapter(FunctionCallResultList)
 
 FunctionDefinitionList = Annotated[list[FunctionDefinition], Field(min_length=1)]
 FunctionDefinitionFile = TypeAdapter(FunctionDefinitionList)
