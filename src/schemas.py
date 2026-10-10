@@ -18,7 +18,7 @@ class FunctionDefinition(BaseModel):
 class FunctionCallResult(BaseModel):
 	prompt: str
 	name: str
-	parameters: dict[str, str | float | bool]
+	parameters: dict[str, str | int| float | bool]
 
 FunctionCallResultList = Annotated[list[FunctionCallResult], Field(min_length=1)]
 FunctionCallResultFile = TypeAdapter(FunctionCallResultList)
