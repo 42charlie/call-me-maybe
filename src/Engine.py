@@ -1,6 +1,6 @@
 import json
 from sys import stderr
-from os import makedirs
+from os import makedirs, path
 from typing import Any
 from llm_sdk import Small_LLM_Model  # type: ignore
 from src.utils import is_valid_string_token
@@ -57,13 +57,16 @@ class Engine:
             raise e
         # create output folder
         try:
-            makedirs(args.out_path[:args.out_path.rfind("/")], exist_ok=True)
-            with open(args.out_path, "w") as file:
+            normalized = path.normpath(args.out_path)
+            dirname = path.dirname(normalized)
+            if dirname:
+                makedirs(dirname, exist_ok=True)
+            with open(normalized, "w") as file:
                 pass
         except Exception as e:
             print("Failed to create output file:", e, file=stderr)
             raise e
-        self.outfile = args.out_path
+        self.outfile = normalized
 
     def load_vocab(self, model: Small_LLM_Model) -> None:
         print("loading vocab...")
