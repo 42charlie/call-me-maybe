@@ -8,7 +8,8 @@ def parse_args() -> EngineConfig:
                         default="data/input/functions_definition.json")
     parser.add_argument("--input",
                         default="data/input/function_calling_tests.json")
-    parser.add_argument("--output", default="data/output/function_calling_results.json")
+    parser.add_argument("--output",
+                        default="data/output/function_calling_results.json")
     args = parser.parse_args()
     # validate args using EngineConfig
     config = EngineConfig(

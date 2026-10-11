@@ -6,7 +6,7 @@ from src.schemas import FunctionCallResult
 try:
     args = parse_args()
     engine = Engine(args)
-except Exception as e:
+except Exception:
     exit(1)
 
 # build outer prompt & encode it
