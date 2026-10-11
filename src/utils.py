@@ -1,5 +1,5 @@
 import argparse
-from schemas import EngineConfig
+from src.schemas import EngineConfig
 
 
 def parse_args() -> EngineConfig:

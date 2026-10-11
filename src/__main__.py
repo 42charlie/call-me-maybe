@@ -2,8 +2,12 @@ from src.utils import parse_args
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
 
-args = parse_args()
-engine = Engine(args)
+
+try:
+    args = parse_args()
+    engine = Engine(args)
+except Exception as e:
+    exit(1)
 
 # build outer prompt & encode it
 prompt = engine.build_outer_prompt()

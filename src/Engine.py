@@ -21,8 +21,12 @@ class Engine:
         self.model = Small_LLM_Model()
         self.current_func: FunctionDefinition | None = None
 
-        self.load_files(args)
-        self.load_vocab(self.model)
+        try:
+            self.load_files(args)
+            self.load_vocab(self.model)
+        except Exception as e:
+            print("Failed to initialize engine:", e, file=stderr)
+            raise e
 
     def __str__(self) -> str:
         out = ""
@@ -42,6 +46,7 @@ class Engine:
             self.tool_defs = FunctionDefinitionFile.validate_python(defs)
         except Exception as e:
             print("Failed to load function definitions:", e, file=stderr)
+            raise e
         # load input tests
         try:
             with open(args.in_path, "r") as file:
@@ -49,6 +54,7 @@ class Engine:
             self.test_prompts = TestPromptFile.validate_python(prompts)
         except Exception as e:
             print("Failed to load input tests:", e, file=stderr)
+            raise e
         # create output folder
         try:
             makedirs(args.out_path[:args.out_path.rfind("/")], exist_ok=True)
@@ -56,6 +62,7 @@ class Engine:
                 pass
         except Exception as e:
             print("Failed to create output file:", e, file=stderr)
+            raise e
         self.outfile = args.out_path
 
     def load_vocab(self, model: Small_LLM_Model) -> None:
@@ -198,3 +205,4 @@ Output:
                 file.write(json_bytes)
         except Exception as e:
             print("Failed to save output:", e, file=stderr)
+            raise e
