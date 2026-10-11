@@ -139,66 +139,115 @@ Output:
             tree = tree[chosen]
             input_ids.append(chosen)
 
+    def _decode_boolean_param(self, input_ids: list[int]) -> list[int]:
+        """Decode a boolean value"""
+        true_ids: list[int] = self.model.encode("true").flatten().tolist()
+        false_ids: list[int] = self.model.encode("false").flatten().tolist()
+
+        valid_tokens = [true_ids[0], false_ids[0]]
+        logits = self.model.get_logits_from_input_ids(input_ids)
+
+        for _id in range(len(logits)):
+            if _id not in valid_tokens:
+                logits[_id] = float("-inf")
+
+        chosen = max(range(len(logits)), key=logits.__getitem__)
+        input_ids.append(chosen)
+
+        # Append continuation tokens if the literal was split
+        if chosen == true_ids[0] and len(true_ids) > 1:
+            input_ids.extend(true_ids[1:])
+        elif chosen == false_ids[0] and len(false_ids) > 1:
+            input_ids.extend(false_ids[1:])
+
+        return input_ids
+
+    def _decode_number_param(
+        self, input_ids: list[int], sep_token_id: int
+    ) -> list[int]:
+        """Decode a numeric value"""
+        subtoken = 0
+        while True:
+            logits = self.model.get_logits_from_input_ids(input_ids)
+
+            for _id in range(len(logits)):
+                is_numeric = _id in self.numeric_ids
+                is_terminator = subtoken > 0 and _id == sep_token_id
+                if not (is_numeric or is_terminator):
+                    logits[_id] = float("-inf")
+
+            chosen = max(range(len(logits)), key=logits.__getitem__)
+            if chosen == sep_token_id:
+                break
+
+            input_ids.append(chosen)
+            subtoken += 1
+
+        return input_ids
+
+    def _decode_string_param(self, input_ids: list[int]) -> list[int]:
+        """Decode string content"""
+        while True:
+            logits = self.model.get_logits_from_input_ids(input_ids)
+
+            for _id in range(len(logits)):
+                if not is_valid_string_token(self.id_to_token[_id]):
+                    logits[_id] = float("-inf")
+
+            chosen = max(range(len(logits)), key=logits.__getitem__)
+            token_str = self.id_to_token[chosen]
+
+            if '"' in token_str:
+                quote_idx = token_str.index('"')
+                prefix = token_str[:quote_idx]
+                # Preserve characters that appeared before the quote
+                if prefix:
+                    input_ids.extend(
+                        self.model.encode(prefix).flatten().tolist()
+                    )
+                break
+
+            input_ids.append(chosen)
+
+        # Force the exact closing double-quote token
+        input_ids.append(self.token_to_id['"'])
+        return input_ids
+
     def get_function_params(self, input_ids: list[int]) -> list[int]:
+        """Dispatch parameter generation by type"""
         print("getting function params...")
         if self.current_func is None:
             return input_ids
+
         params_list = list(self.current_func.parameters.items())
 
         for idx, (param_name, param_info) in enumerate(params_list):
             is_last = (idx == len(params_list) - 1)
             sep_id = self.brace_token_id if is_last else self.comma_token_id
 
-            # inject deterministic parameter name
+            # Deterministic parameter key prefix
             if param_info.type == "string":
                 prefix = f'"{param_name}": "'
             else:
                 prefix = f'"{param_name}": '
-            input_ids += self.model.encode(prefix).flatten().tolist()
+            input_ids.extend(self.model.encode(prefix).flatten().tolist())
 
-            subtoken = 0
-            while True:
-                logits = self.model.get_logits_from_input_ids(input_ids)
+            # Type dispatch
+            if param_info.type == "boolean":
+                input_ids = self._decode_boolean_param(input_ids)
+            elif param_info.type == "number":
+                input_ids = self._decode_number_param(input_ids, sep_id)
+            elif param_info.type == "string":
+                input_ids = self._decode_string_param(input_ids)
 
-                for _id in range(len(logits)):
-                    if param_info.type == "string":
-                        # valid string token
-                        if not is_valid_string_token(self.id_to_token[_id]):
-                            logits[_id] = float('-inf')
-                    elif param_info.type == "number":
-                        # beginning: only numeric characters
-                        # mid: allow numeric characters or delimiter
-                        is_numeric = _id in self.numeric_ids
-                        is_terminator = subtoken > 0 and _id == sep_id
-                        valid = is_numeric or is_terminator
+            # Deterministic parameter separator
+            if is_last:
+                input_ids.append(self.brace_token_id)
+            else:
+                input_ids.extend(self.tokens_comma_space)
 
-                        if not valid:
-                            logits[_id] = float('-inf')
-
-                chosen = max(range(len(logits)), key=logits.__getitem__)
-                token_str = self.id_to_token[chosen]
-
-                # string end case with: "
-                if param_info.type == "string" and '"' in token_str:
-                    input_ids.append(self.token_to_id['"'])
-                    if is_last:
-                        input_ids.append(self.brace_token_id)
-                    else:
-                        input_ids += self.tokens_comma_space
-                    break
-
-                # number end case with: , or }
-                if param_info.type == "number" and chosen == sep_id:
-                    input_ids.append(chosen)
-                    if not is_last:
-                        input_ids.append(self.token_to_id[' '])
-                    break
-
-                input_ids.append(chosen)
-                subtoken += 1
-
-        # close json payload
-        input_ids += self.tokens_json_close
+        # Deterministic payload closure
+        input_ids.extend(self.tokens_json_close)
         return input_ids
 
     def save_output(self, output: list[FunctionCallResult]) -> None:
