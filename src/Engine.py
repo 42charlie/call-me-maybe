@@ -2,16 +2,16 @@ import json
 from sys import stderr
 from os import makedirs
 from typing import Any
-from argparse import Namespace
 from llm_sdk import Small_LLM_Model  # type: ignore
 from src.utils import is_valid_string_token
 from src.schemas import (FunctionCallResult, TestPromptFile, TestPromptList,
                          FunctionDefinitionFile, FunctionDefinitionList,
-                         FunctionCallResultFile, FunctionDefinition)
+                         FunctionCallResultFile, FunctionDefinition,
+                         EngineConfig)
 
 
 class Engine:
-    def __init__(self, args: Namespace):
+    def __init__(self, args: EngineConfig):
         self.tool_defs: FunctionDefinitionList = []
         self.test_prompts: TestPromptList = []
         self.id_to_token: dict[int, str] = {}
@@ -33,30 +33,30 @@ class Engine:
         out += f"{len(self.numeric_ids)} numeric ids\n"
         return (out)
 
-    def load_files(self, args: Namespace) -> None:
+    def load_files(self, args: EngineConfig) -> None:
         print("loading files...")
         # load functions definitions
         try:
-            with open(args.functions_definition, "r") as file:
+            with open(args.funcs_def_path, "r") as file:
                 defs = json.loads(file.read())
             self.tool_defs = FunctionDefinitionFile.validate_python(defs)
         except Exception as e:
             print("Failed to load function definitions:", e, file=stderr)
         # load input tests
         try:
-            with open(args.input, "r") as file:
+            with open(args.in_path, "r") as file:
                 prompts = json.loads(file.read())
             self.test_prompts = TestPromptFile.validate_python(prompts)
         except Exception as e:
             print("Failed to load input tests:", e, file=stderr)
         # create output folder
         try:
-            makedirs(args.output[:args.output.rfind("/")], exist_ok=True)
-            with open(args.output, "w") as file:
+            makedirs(args.out_path[:args.out_path.rfind("/")], exist_ok=True)
+            with open(args.out_path, "w") as file:
                 pass
         except Exception as e:
             print("Failed to create output file:", e, file=stderr)
-        self.outfile = args.output
+        self.outfile = args.out_path
 
     def load_vocab(self, model: Small_LLM_Model) -> None:
         print("loading vocab...")

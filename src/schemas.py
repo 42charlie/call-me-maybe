@@ -2,6 +2,15 @@ from typing import Literal, Annotated
 from pydantic import BaseModel, Field, TypeAdapter, StringConstraints
 
 
+class EngineConfig(BaseModel):
+    funcs_def_path: Annotated[str, StringConstraints(min_length=1,
+                                                     strip_whitespace=True)]
+    in_path: Annotated[str, StringConstraints(min_length=1,
+                                              strip_whitespace=True)]
+    out_path: Annotated[str, StringConstraints(min_length=1,
+                                               strip_whitespace=True)]
+
+
 class Parameter(BaseModel):
     type: Literal["string", "number", "boolean"]
 
