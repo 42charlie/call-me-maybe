@@ -3,6 +3,7 @@ name = "call-me-maybe"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
+	"flake8>=7.4.1",
 	"llm-sdk",
 	"mypy>=2.3.1",
 	"pydantic>=2.13.5",
