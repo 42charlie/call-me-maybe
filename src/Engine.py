@@ -1,25 +1,26 @@
-from os import makedirs
 import json
-import argparse
 from sys import stderr
-from llm_sdk import Small_LLM_Model
+from os import makedirs
+from argparse import Namespace
+from llm_sdk import Small_LLM_Model # type: ignore
 from src.utils import is_valid_string_token
-from src.schemas import TestPromptFile, FunctionDefinitionFile, FunctionCallResultFile
+from src.schemas import FunctionCallResult, TestPromptFile, TestPromptList, FunctionDefinitionFile, FunctionDefinitionList, FunctionCallResultFile, FunctionDefinition
 
 class Engine:
-	def __init__(self, args):
-		self.tool_defs = {}
-		self.test_prompts = {}
-		self.id_to_token = {}
-		self.token_to_id = {}
-		self.numeric_ids = []
-		self.functions_token_tree = {}
+	def __init__(self, args: Namespace):
+		self.tool_defs: FunctionDefinitionList = []
+		self.test_prompts: TestPromptList = []
+		self.id_to_token: dict[int, str] = {}
+		self.token_to_id: dict[str, int] = {}
+		self.numeric_ids: list[int] = []
+		self.functions_token_tree: dict = {}
 		self.model = Small_LLM_Model()
-		self.current_func = {}
+		self.current_func: FunctionDefinition | None = None
 
 		self.load_files(args)
 		self.load_vocab(self.model)
-	def __str__(self):
+
+	def __str__(self) -> str:
 		out = ""
 		out += f"{len(self.tool_defs)} tool defs\n" 
 		out += f"{len(self.test_prompts)} test prompts\n" 
@@ -28,20 +29,20 @@ class Engine:
 		out += f"{len(self.numeric_ids)} numeric ids\n" 
 		return (out)
 
-	def load_files(self, args: argparse.Namespace):
+	def load_files(self, args: Namespace) -> None:
 		print("loading files...")
 		#load functions definitions
 		try:
 			with open(args.functions_definition, "r") as file:
-				self.tool_defs = json.loads(file.read())
-			self.tool_defs = FunctionDefinitionFile.validate_python(self.tool_defs)
+				defs = json.loads(file.read())
+			self.tool_defs = FunctionDefinitionFile.validate_python(defs)
 		except Exception as e:
 			print("Failed to load function definitions:", e, file=stderr)
 		#load input tests
 		try:
 			with open(args.input, "r") as file:
-				self.test_prompts = json.loads(file.read())
-			self.test_prompts = TestPromptFile.validate_python(self.test_prompts)
+				prompts = json.loads(file.read())
+			self.test_prompts = TestPromptFile.validate_python(prompts)
 		except Exception as e:
 			print("Failed to load input tests:", e, file=stderr)
 		#create output folder
@@ -53,7 +54,7 @@ class Engine:
 			print("Failed to create output file:", e, file=stderr)
 		self.outfile = args.output
 
-	def load_vocab(self, model: Small_LLM_Model):
+	def load_vocab(self, model: Small_LLM_Model) -> None:
 		print("loading vocab...")
 		ALLOWED_CHARS = set("0123456789.-")
 		vocab_path = model.get_path_to_vocab_file()
@@ -82,7 +83,7 @@ class Engine:
 				node = node[item]
 			node['func_def'] = function
 
-	def build_outer_prompt(self):
+	def build_outer_prompt(self) -> list[int]:
 		print("building outer prompt...")
 		tools_str = FunctionDefinitionFile.dump_json(self.tool_defs).decode()
 		prompt = """
@@ -91,16 +92,18 @@ Tools:
 
 Output:
 """
-		return (self.model.encode(prompt).flatten().tolist())
+		prompt_ids:list[int] = self.model.encode(prompt).flatten().tolist()
+		return (prompt_ids)
 
-	def build_inner_prompt(self, prompt, test_prompt):
+	def build_inner_prompt(self, prompt: list[int], test_prompt: str) -> list[int]:
 		print("building inner prompt...")
 		inner_prompt = '''{
 "prompt": "''' + test_prompt + '''",
 "name": "'''
-		return (prompt + self.model.encode(inner_prompt).flatten().tolist())
+		prompt_ids:list[int] = self.model.encode(inner_prompt).flatten().tolist()
+		return (prompt + prompt_ids)
 
-	def select_function(self, input_ids):
+	def select_function(self, input_ids: list[int]) -> list[int]:
 		print("selecting function ...")
 		tree = self.functions_token_tree
 		while True:
@@ -120,8 +123,10 @@ Output:
 			tree = tree[chosen]
 			input_ids.append(chosen)
 
-	def get_function_params(self, input_ids):
+	def get_function_params(self, input_ids: list[int]) -> list[int]:
 		print("getting function params...")
+		if self.current_func is None:
+			return input_ids
 		params_list = list(self.current_func.parameters.items())
 		
 		for idx, (param_name, param_info) in enumerate(params_list):
@@ -174,7 +179,7 @@ Output:
 		input_ids += self.tokens_json_close
 		return input_ids
 
-	def save_output(self, output):
+	def save_output(self, output: list[FunctionCallResult]) -> None:
 		try:
 			json_bytes = FunctionCallResultFile.dump_json(output, indent=2)
 			with open(self.outfile, "wb") as file:
