@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -112,6 +112,9 @@ dependencies = [
     { name = "flake8" },
     { name = "llm-sdk" },
     { name = "mypy" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pydantic" },
 ]
 
@@ -120,6 +123,7 @@ requires-dist = [
     { name = "flake8", specifier = ">=7.4.1" },
     { name = "llm-sdk", editable = "llm_sdk" },
     { name = "mypy", specifier = ">=2.3.1" },
+    { name = "numpy", specifier = ">=2.2.6" },
     { name = "pydantic", specifier = ">=2.13.5" },
 ]
 
