@@ -167,8 +167,9 @@ Output:
             list[int]: Encoded token ids of the combined prompt.
         """
         print("building inner prompt...")
+        escaped_prompt = json.dumps(test_prompt)
         inner_prompt = '''{
-"prompt": "''' + test_prompt + '''",
+"prompt": ''' + escaped_prompt + ''',
 "name": "'''
         ids: list[int] = self.model.encode(inner_prompt).flatten().tolist()
         return (prompt + ids)
@@ -291,7 +292,8 @@ Output:
             logits = self.model.get_logits_from_input_ids(input_ids)
 
             for _id in range(len(logits)):
-                if not is_valid_string_token(self.id_to_token[_id]):
+                token_str = self.id_to_token.get(_id)
+                if token_str is None or not is_valid_string_token(token_str):
                     logits[_id] = float("-inf")
 
             chosen = max(range(len(logits)), key=logits.__getitem__)
