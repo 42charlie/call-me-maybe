@@ -1,3 +1,5 @@
+"""Function-calling engine: loads files/vocab and generates tool calls."""
+
 import json
 from sys import stderr
 from os import makedirs, path
@@ -11,7 +13,27 @@ from src.schemas import (FunctionCallResult, TestPromptFile, TestPromptList,
 
 
 class Engine:
+    """Drive tool selection and argument generation via a small LLM.
+
+    Attributes:
+        tool_defs: Loaded function definitions.
+        test_prompts: Loaded test prompts.
+        id_to_token: Vocabulary id to token mapping.
+        token_to_id: Token to vocabulary id mapping.
+        numeric_ids: Token ids representing numeric characters.
+        functions_token_tree: Trie of function-name token sequences.
+        model: Underlying small LLM model.
+        current_func: Function selected for the current call, if any.
+    """
     def __init__(self, args: EngineConfig):
+        """Initialize the engine and load files and vocabulary.
+
+        Args:
+            args: Engine configuration with input/output paths.
+
+        Raises:
+            Exception: If loading files or vocabulary fails.
+        """
         self.tool_defs: FunctionDefinitionList = []
         self.test_prompts: TestPromptList = []
         self.id_to_token: dict[int, str] = {}
@@ -28,16 +50,19 @@ class Engine:
             print("Failed to initialize engine:", e, file=stderr)
             raise e
 
-    def __str__(self) -> str:
-        out = ""
-        out += f"{len(self.tool_defs)} tool defs\n"
-        out += f"{len(self.test_prompts)} test prompts\n"
-        out += f"{len(self.id_to_token)} id to token\n"
-        out += f"{len(self.token_to_id)} token to id\n"
-        out += f"{len(self.numeric_ids)} numeric ids\n"
-        return (out)
-
     def load_files(self, args: EngineConfig) -> None:
+        """Load tool definitions and test prompts, then prepare output file.
+
+        Reads the function definitions and input test prompts from the paths
+        in ``args``, validates them against the corresponding schemas, and
+        creates (or truncates) the output file.
+
+        Args:
+            args: Engine configuration containing the input/output paths.
+
+        Raises:
+            Exception: If any file cannot be read, parsed, or validated.
+        """
         print("loading files...")
         # load functions definitions
         try:
@@ -69,6 +94,15 @@ class Engine:
         self.outfile = normalized
 
     def load_vocab(self, model: Small_LLM_Model) -> None:
+        """Load the model vocabulary and build token lookup structures.
+
+        Populates the id-to-token and token-to-id maps, collects numeric
+        token ids, caches frequently used token sequences, and builds the
+        prefix tree mapping function names to their definitions.
+
+        Args:
+            model: The LLM model providing the vocab file and tokenizer.
+        """
         print("loading vocab...")
         ALLOWED_CHARS = set("0123456789.-")
         vocab_path = model.get_path_to_vocab_file()
@@ -99,6 +133,14 @@ class Engine:
             node['func_def'] = function
 
     def build_outer_prompt(self) -> list[int]:
+        """Build and encode the shared outer prompt.
+
+        Serializes the tool definitions and wraps them in the fixed
+        "Tools:"/"Output:" template used as the prefix for every request.
+
+        Returns:
+            list[int]: Encoded token ids of the outer prompt.
+        """
         print("building outer prompt...")
         tools_str = FunctionDefinitionFile.dump_json(self.tool_defs).decode()
         prompt = """
@@ -112,6 +154,18 @@ Output:
 
     def build_inner_prompt(
             self, prompt: list[int], test_prompt: str) -> list[int]:
+        """Build and encode the per-test inner prompt.
+
+        Appends the JSON scaffolding for the current test prompt onto the
+        outer prompt, stopping right before the function name.
+
+        Args:
+            prompt: Encoded outer prompt token ids.
+            test_prompt: Raw user prompt to embed in the JSON body.
+
+        Returns:
+            list[int]: Encoded token ids of the combined prompt.
+        """
         print("building inner prompt...")
         inner_prompt = '''{
 "prompt": "''' + test_prompt + '''",
@@ -120,6 +174,20 @@ Output:
         return (prompt + ids)
 
     def select_function(self, input_ids: list[int]) -> list[int]:
+        """Select a function by walking the function-name token tree.
+
+        At each step, constrains the logits to valid child tokens of the
+        current tree node and greedily picks the best one, until a node
+        holding a function definition is reached. Opens the parameters
+        block and stores the match in ``self.current_func``.
+
+        Args:
+            input_ids: Token ids generated so far.
+
+        Returns:
+            list[int]: ``input_ids`` extended with the function name and
+                the parameter-block prefix.
+        """
         print("selecting function ...")
         tree = self.functions_token_tree
         while True:
@@ -140,7 +208,17 @@ Output:
             input_ids.append(chosen)
 
     def _decode_boolean_param(self, input_ids: list[int]) -> list[int]:
-        """Decode a boolean value"""
+        """Decode a boolean value.
+
+        Constrains the next-token logits to ``true``/``false`` starts and
+        appends the chosen literal, including any continuation subtokens.
+
+        Args:
+            input_ids: Token ids generated so far.
+
+        Returns:
+            list[int]: ``input_ids`` extended with the boolean literal.
+        """
         true_ids: list[int] = self.model.encode("true").flatten().tolist()
         false_ids: list[int] = self.model.encode("false").flatten().tolist()
 
@@ -165,7 +243,18 @@ Output:
     def _decode_number_param(
         self, input_ids: list[int], sep_token_id: int
     ) -> list[int]:
-        """Decode a numeric value"""
+        """Decode a numeric value.
+
+        Repeatedly samples from numeric-only tokens until the separator
+        token is chosen, which terminates the number.
+
+        Args:
+            input_ids: Token ids generated so far.
+            sep_token_id: Token id that terminates the number.
+
+        Returns:
+            list[int]: ``input_ids`` extended with the numeric tokens.
+        """
         subtoken = 0
         while True:
             logits = self.model.get_logits_from_input_ids(input_ids)
@@ -186,7 +275,18 @@ Output:
         return input_ids
 
     def _decode_string_param(self, input_ids: list[int]) -> list[int]:
-        """Decode string content"""
+        """Decode string content.
+
+        Samples only printable tokens until a token containing a double
+        quote is reached, preserving any characters before the quote, then
+        appends the closing quote token.
+
+        Args:
+            input_ids: Token ids generated so far.
+
+        Returns:
+            list[int]: ``input_ids`` extended with the string content.
+        """
         while True:
             logits = self.model.get_logits_from_input_ids(input_ids)
 
@@ -214,7 +314,20 @@ Output:
         return input_ids
 
     def get_function_params(self, input_ids: list[int]) -> list[int]:
-        """Dispatch parameter generation by type"""
+        """Dispatch parameter generation by type.
+
+        For each parameter of ``self.current_func``, appends the
+        deterministic key prefix and delegates value decoding based on the
+        parameter type (boolean, number, or string), inserting separators
+        between params and closing the JSON payload.
+
+        Args:
+            input_ids: Token ids generated so far.
+
+        Returns:
+            list[int]: ``input_ids`` extended with the full parameter
+                payload.
+        """
         print("getting function params...")
         if self.current_func is None:
             return input_ids
@@ -251,6 +364,14 @@ Output:
         return input_ids
 
     def save_output(self, output: list[FunctionCallResult]) -> None:
+        """Serialize function call results and write them to the output file.
+
+        Args:
+            output: Function call results to persist.
+
+        Raises:
+            Exception: If serialization or writing to ``self.outfile`` fails.
+        """
         try:
             json_bytes = FunctionCallResultFile.dump_json(output, indent=2)
             with open(self.outfile, "wb") as file:

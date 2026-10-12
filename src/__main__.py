@@ -1,3 +1,9 @@
+"""CLI entry point for the function-calling engine.
+
+Parses arguments, initializes the engine, iterates over the test
+prompts, and writes function-call results to the output file.
+"""
+
 from src.utils import parse_args
 from src.Engine import Engine
 from src.schemas import FunctionCallResult

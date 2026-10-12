@@ -1,8 +1,16 @@
+"""CLI argument parsing and token validation helpers."""
+
 import argparse
 from src.schemas import EngineConfig
 
 
 def parse_args() -> EngineConfig:
+    """Parse CLI arguments and build an engine configuration.
+
+    Returns:
+        EngineConfig: Validated configuration holding the paths to the
+            functions definition, input tests, and output files.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("--functions_definition",
                         default="data/input/functions_definition.json")
@@ -21,6 +29,15 @@ def parse_args() -> EngineConfig:
 
 
 def is_valid_string_token(token_str: str) -> bool:
+    """Check whether a token contains only printable characters.
+
+    Args:
+        token_str: Token string to validate.
+
+    Returns:
+        bool: True if no control characters (ASCII < 0x20 or 0x7F) are
+            present, False otherwise.
+    """
     for ch in token_str:
         # printable = not a control char
         if ord(ch) < 0x20 or ord(ch) == 0x7F:
