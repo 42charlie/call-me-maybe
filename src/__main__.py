@@ -4,23 +4,27 @@ Parses arguments, initializes the engine, iterates over the test
 prompts, and writes function-call results to the output file.
 """
 
+import time
+from sys import exit, stderr
 from src.utils import parse_args
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
 
 
+start = time.perf_counter()
+
 try:
     args = parse_args()
-    engine = Engine(args)
-except Exception:
+    engine = Engine()
+    engine.initialize(args)
+except Exception as e:
+    print(f"Engine initialization error: {e}", file=stderr)
     exit(1)
 
-# build outer prompt & encode it
 prompt = engine.build_outer_prompt()
-output = []
-i = 0
+output: list[FunctionCallResult] = []
+
 for test in engine.test_prompts:
-    # build inner prompt & encode it
     json_start_index = len(prompt)
     input_ids = engine.build_inner_prompt(prompt, test.prompt)
     input_ids = engine.select_function(input_ids)
@@ -28,7 +32,7 @@ for test in engine.test_prompts:
     func_call = engine.model.decode(input_ids[json_start_index:])
     vfunc_call = FunctionCallResult.model_validate_json(func_call)
     output.append(vfunc_call)
-    if i == 0:
-        break
-    i += 1
+end = time.perf_counter()
+print(f"Execution time: {end - start:.2f} seconds")
+
 engine.save_output(output)
