@@ -4,6 +4,7 @@ import json
 from sys import stderr
 from os import makedirs, path
 from typing import Any
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 from llm_sdk import Small_LLM_Model  # type: ignore
 from src.utils import is_valid_string_token
@@ -22,6 +23,7 @@ class Engine(BaseModel):
         id_to_token: Vocabulary id to token mapping.
         token_to_id: Token to vocabulary id mapping.
         numeric_ids: Token ids representing numeric characters.
+        valid_string_token_ids: Token ids of valid printable string characters.
         functions_token_tree: Trie of function-name token sequences.
         model: Underlying small LLM model.
         current_func: Function selected for the current call, if any.
@@ -40,6 +42,7 @@ class Engine(BaseModel):
     id_to_token: dict[int, str] = Field(default_factory=dict)
     token_to_id: dict[str, int] = Field(default_factory=dict)
     numeric_ids: list[int] = Field(default_factory=list)
+    valid_string_token_ids: list[int] = Field(default_factory=list)
     functions_token_tree: dict[int | str, Any] = Field(default_factory=dict)
     model: Small_LLM_Model = Field(default_factory=Small_LLM_Model)
     current_func: FunctionDefinition | None = None
@@ -113,6 +116,8 @@ class Engine(BaseModel):
             self.token_to_id[token] = _id
             if token in allowed_chars:
                 self.numeric_ids.append(_id)
+            if is_valid_string_token(token):
+                self.valid_string_token_ids.append(_id)
 
         self.comma_token_id = int(
             self.model.encode(",").flatten().tolist()[-1])
@@ -169,30 +174,30 @@ class Engine(BaseModel):
         return prompt + ids
 
     def select_function(self, input_ids: list[int]) -> list[int]:
-        """Select a function by walking the function-name token tree.
+        """Select a tool by traversing the token tree with masked logits.
 
         Args:
-            input_ids: Token ids generated so far.
+            input_ids: Token sequence generated so far.
 
         Returns:
-            list[int]: Extended input_ids.
+            list[int]: Updated input IDs with selected function name.
         """
-        print("selecting function ...")
         tree = self.functions_token_tree
         while True:
             if 'func_def' in tree:
                 self.current_func = tree['func_def']
-                input_ids += self.tokens_param_open
+                input_ids.extend(self.tokens_param_open)
                 return input_ids
 
             valid_tokens = [k for k in tree.keys() if isinstance(k, int)]
             logits = self.model.get_logits_from_input_ids(input_ids)
 
-            for _id in range(len(logits)):
-                if _id not in valid_tokens:
-                    logits[_id] = float('-inf')
+            # Set all invalid tokens to -inf
+            logits_arr = np.array(logits, dtype=np.float32)
+            masked_logits = np.full_like(logits_arr, -np.inf)
+            masked_logits[valid_tokens] = logits_arr[valid_tokens]
 
-            chosen = max(range(len(logits)), key=logits.__getitem__)
+            chosen = int(np.argmax(masked_logits))
             tree = tree[chosen]
             input_ids.append(chosen)
 
@@ -232,26 +237,30 @@ class Engine(BaseModel):
     def _decode_number_param(
         self, input_ids: list[int], sep_token_id: int
     ) -> list[int]:
-        """Decode a numeric value.
+        """Sample a numeric value by masking logits until a separator.
 
         Args:
-            input_ids: Token ids generated so far.
-            sep_token_id: Token id that terminates the number.
+            input_ids: Token sequence generated so far.
+            sep_token_id: Token ID indicating end of numeric input.
 
         Returns:
-            list[int]: Extended input_ids.
+            list[int]: Updated input IDs with numeric tokens.
         """
         subtoken = 0
         while True:
             logits = self.model.get_logits_from_input_ids(input_ids)
+            logits_arr = np.array(logits, dtype=np.float32)
 
-            for _id in range(len(logits)):
-                is_numeric = _id in self.numeric_ids
-                is_terminator = subtoken > 0 and _id == sep_token_id
-                if not (is_numeric or is_terminator):
-                    logits[_id] = float("-inf")
+            # Build valid token list for this step
+            valid_tokens = list(self.numeric_ids)
+            if subtoken > 0:
+                valid_tokens.append(sep_token_id)
 
-            chosen = max(range(len(logits)), key=logits.__getitem__)
+            # Set non-valid logits to -inf
+            masked_logits = np.full_like(logits_arr, -np.inf)
+            masked_logits[valid_tokens] = logits_arr[valid_tokens]
+
+            chosen = int(np.argmax(masked_logits))
             if chosen == sep_token_id:
                 break
 
@@ -261,23 +270,24 @@ class Engine(BaseModel):
         return input_ids
 
     def _decode_string_param(self, input_ids: list[int]) -> list[int]:
-        """Decode string content.
+        """Sample string content by masking logits to printable tokens.
 
         Args:
-            input_ids: Token ids generated so far.
+            input_ids: Token sequence generated so far.
 
         Returns:
-            list[int]: Extended input_ids.
+            list[int]: Updated input IDs with the string content.
         """
         while True:
             logits = self.model.get_logits_from_input_ids(input_ids)
+            logits_arr = np.array(logits, dtype=np.float32)
 
-            for _id in range(len(logits)):
-                token_str = self.id_to_token.get(_id)
-                if token_str is None or not is_valid_string_token(token_str):
-                    logits[_id] = float("-inf")
+            # Set all non-valid string tokens to -inf
+            masked_logits = np.full_like(logits_arr, -np.inf)
+            masked_logits[self.valid_string_token_ids] = logits_arr[
+                self.valid_string_token_ids]
 
-            chosen = max(range(len(logits)), key=logits.__getitem__)
+            chosen = int(np.argmax(masked_logits))
             token_str = self.id_to_token[chosen]
 
             if '"' in token_str:
