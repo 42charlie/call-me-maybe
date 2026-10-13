@@ -236,8 +236,10 @@ class Engine(BaseModel):
         return input_ids
 
     def _decode_number_param(
-        self, input_ids: list[int], sep_token_id: int
-    ) -> list[int]:
+            self,
+            input_ids: list[int],
+            sep_token_id: int,
+            max_tokens: int = 16) -> list[int]:
         """Sample a numeric value by masking logits until a separator.
 
         Args:
@@ -248,7 +250,7 @@ class Engine(BaseModel):
             list[int]: Updated input IDs with numeric tokens.
         """
         subtoken = 0
-        while True:
+        while subtoken < max_tokens:
             logits = self.model.get_logits_from_input_ids(input_ids)
             logits_arr = np.array(logits, dtype=np.float32)
 
@@ -263,14 +265,16 @@ class Engine(BaseModel):
 
             chosen = int(np.argmax(masked_logits))
             if chosen == sep_token_id:
-                break
+                return input_ids
 
             input_ids.append(chosen)
             subtoken += 1
 
         return input_ids
 
-    def _decode_string_param(self, input_ids: list[int]) -> list[int]:
+    def _decode_string_param(self,
+                             input_ids: list[int],
+                             max_tokens: int = 64) -> list[int]:
         """Sample string content by masking logits to printable tokens.
 
         Args:
@@ -279,17 +283,23 @@ class Engine(BaseModel):
         Returns:
             list[int]: Updated input IDs with the string content.
         """
-        while True:
+        subtoken = 0
+        quote_id = self.token_to_id['"']
+
+        while subtoken < max_tokens:
             logits = self.model.get_logits_from_input_ids(input_ids)
             logits_arr = np.array(logits, dtype=np.float32)
 
+            valid_tokens = list(self.valid_string_token_ids)
+            if subtoken > 0:
+                valid_tokens.append(quote_id)
+
             # Set all non-valid string tokens to -inf
             masked_logits = np.full_like(logits_arr, -np.inf)
-            masked_logits[self.valid_string_token_ids] = logits_arr[
-                self.valid_string_token_ids]
+            masked_logits[valid_tokens] = logits_arr[valid_tokens]
 
             chosen = int(np.argmax(masked_logits))
-            token_str = self.id_to_token[chosen]
+            token_str = self.id_to_token.get(chosen, "")
 
             if '"' in token_str:
                 quote_idx = token_str.index('"')
@@ -303,8 +313,9 @@ class Engine(BaseModel):
                 break
 
             input_ids.append(chosen)
+            subtoken += 1
 
-        input_ids.append(self.token_to_id['"'])
+        input_ids.append(quote_id)
         return input_ids
 
     def get_function_params(self, input_ids: list[int]) -> list[int]:
