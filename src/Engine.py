@@ -85,18 +85,21 @@ class Engine(BaseModel):
             self.tool_defs = FunctionDefinitionFile.validate_python(defs)
         except FileNotFoundError:
             raise RuntimeError(
-                "Function definitions file not found:",
-                f"'{args.funcs_def_path}'"
+                f"Function definitions file not found: '{args.funcs_def_path}'"
             )
         except json.JSONDecodeError as e:
             raise RuntimeError(
-                "Invalid JSON in function definitions file",
+                "Invalid JSON in function definitions file"+
                 f"('{args.funcs_def_path}', line {e.lineno}): {e.msg}"
             )
         except ValidationError as e:
             raise RuntimeError(
-                "Schema error in function definitions",
+                "Schema error in function definitions"+
                 f"('{args.funcs_def_path}'): {format_validation_error(e)}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load function definitions file '{args.funcs_def_path}': {e}"
             )
 
         # 2. Input test prompts file
@@ -106,18 +109,21 @@ class Engine(BaseModel):
             self.test_prompts = TestPromptFile.validate_python(prompts)
         except FileNotFoundError:
             raise RuntimeError(
-                "Test prompts file not found:",
-                f"'{args.in_path}'"
+                f"Test prompts file not found: '{args.in_path}'"
             )
         except json.JSONDecodeError as e:
             raise RuntimeError(
-                "Invalid JSON in test prompts file",
+                "Invalid JSON in test prompts file"+
                 f"('{args.in_path}', line {e.lineno}): {e.msg}"
             )
         except ValidationError as e:
             raise RuntimeError(
-                "Schema error in test prompts",
+                "Schema error in test prompts"+
                 f"('{args.in_path}'): {format_validation_error(e)}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load test prompts file '{args.in_path}': {e}"
             )
 
         # Store normalized path without truncating file prematurely
@@ -132,8 +138,21 @@ class Engine(BaseModel):
         print("loading vocab...")
         allowed_chars = set("0123456789.-")
         vocab_path = model.get_path_to_vocab_file()
-        with open(vocab_path, "r") as file:
-            vocab = json.load(file)
+        try:
+            with open(vocab_path, "r") as file:
+                vocab = json.load(file)
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"Vocabulary file not found at '{vocab_path}'"
+            )
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Vocabulary file '{vocab_path}' is corrupt: {e.msg}"
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load vocabulary file '{vocab_path}': {e}"
+            )
 
         for _id in vocab.values():
             token = model.decode(_id)
@@ -423,13 +442,27 @@ class Engine(BaseModel):
         Raises:
             Exception: If saving fails.
         """
-        try:
-            dirname = path.dirname(self.outfile)
-            if dirname:
+        dirname = path.dirname(self.outfile)
+        if dirname:
+            try:
                 makedirs(dirname, exist_ok=True)
+            except OSError as e:
+                raise RuntimeError(
+                    f"Cannot create directory '{dirname}': {e.strerror}"
+                )
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to create directory '{dirname}': {e}"
+                )
+        try:
             json_bytes = FunctionCallResultFile.dump_json(output, indent=2)
             with open(self.outfile, "wb") as file:
                 file.write(json_bytes)
+        except OSError as e:
+            raise RuntimeError(
+                f"Failed to save output file '{self.outfile}': {e}"
+            )
         except Exception as e:
-            print(f"Failed to save output: {e}", file=stderr)
-            raise e
+            raise RuntimeError(
+                f"Unexpected error while saving output file '{self.outfile}': {e}"
+            )

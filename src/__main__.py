@@ -5,7 +5,7 @@ prompts, and writes function-call results to the output file.
 """
 
 import time
-from sys import exit
+from sys import exit, stderr
 from src.utils import parse_args
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
@@ -30,9 +30,16 @@ for test in engine.test_prompts:
     input_ids = engine.select_function(input_ids)
     input_ids = engine.get_function_params(input_ids)
     func_call = engine.model.decode(input_ids[json_start_index:])
-    vfunc_call = FunctionCallResult.model_validate_json(func_call)
-    output.append(vfunc_call)
+    try:
+        vfunc_call = FunctionCallResult.model_validate_json(func_call)
+        output.append(vfunc_call)
+    except Exception as e:
+        print(f"warning: failed to parse function call for `{test.prompt}`: {e}", file=stderr)
 end = time.perf_counter()
 print(f"Execution time: {end - start:.2f} seconds")
 
-engine.save_output(output)
+try:
+    engine.save_output(output)
+except Exception as e:
+    print(f"Error saving output: {e}", file=stderr)
+    exit(1)
