@@ -66,7 +66,6 @@ class Engine(BaseModel):
             self.load_files(args)
             self.load_vocab(self.model)
         except Exception as e:
-            print(f"Failed to initialize engine: {e}", file=stderr)
             raise e
 
     def load_files(self, args: EngineConfig) -> None:
