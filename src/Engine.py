@@ -356,6 +356,11 @@ class Engine(BaseModel):
 
         params_list = list(self.current_func.parameters.items())
 
+        # If the function takes no arguments, close parameters '{}' and finish
+        if not params_list:
+            input_ids.append(self.brace_token_id)
+            input_ids.extend(self.tokens_json_close)
+            return input_ids
         for idx, (param_name, param_info) in enumerate(params_list):
             is_last = (idx == len(params_list) - 1)
             sep_id = self.brace_token_id if is_last else self.comma_token_id
