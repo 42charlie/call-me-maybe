@@ -250,24 +250,47 @@ class Engine(BaseModel):
             list[int]: Updated input IDs with numeric tokens.
         """
         subtoken = 0
+        current_num_str = ""
+
         while subtoken < max_tokens:
             logits = self.model.get_logits_from_input_ids(input_ids)
             logits_arr = np.array(logits, dtype=np.float32)
 
-            # Build valid token list for this step
-            valid_tokens = list(self.numeric_ids)
-            if subtoken > 0:
-                valid_tokens.append(sep_token_id)
+            has_dot = "." in current_num_str
+            has_digit = any(c.isdigit() for c in current_num_str)
 
-            # Set non-valid logits to -inf
+            step_valid_tokens = []
+            for _id in self.numeric_ids:
+                t_str = self.id_to_token.get(_id, "")
+                stripped = t_str.strip()
+
+                # '-' is only valid at the start (subtoken == 0)
+                if "-" in stripped:
+                    if subtoken > 0 or not stripped.startswith("-"):
+                        continue
+
+                # '.' can only appear once
+                if "." in stripped and has_dot:
+                    continue
+
+                step_valid_tokens.append(_id)
+
+            # Allow terminator once we have at least one digit
+            if has_digit:
+                step_valid_tokens.append(sep_token_id)
+
+            if not step_valid_tokens:
+                break
+
             masked_logits = np.full_like(logits_arr, -np.inf)
-            masked_logits[valid_tokens] = logits_arr[valid_tokens]
+            masked_logits[step_valid_tokens] = logits_arr[step_valid_tokens]
 
             chosen = int(np.argmax(masked_logits))
             if chosen == sep_token_id:
                 return input_ids
 
             input_ids.append(chosen)
+            current_num_str += self.id_to_token.get(chosen, "")
             subtoken += 1
 
         return input_ids
@@ -340,7 +363,7 @@ class Engine(BaseModel):
             if param_info.type == "string":
                 prefix = f'"{param_name}": "'
             else:
-                prefix = f'"{param_name}": '
+                prefix = f'"{param_name}":'
             prefix_ids = [
                 int(t) for t in self.model.encode(prefix).flatten().tolist()
             ]
