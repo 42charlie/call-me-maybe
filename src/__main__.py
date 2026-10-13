@@ -5,7 +5,7 @@ prompts, and writes function-call results to the output file.
 """
 
 import time
-from sys import exit, stderr
+from sys import exit
 from src.utils import parse_args
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
@@ -17,7 +17,7 @@ try:
     args = parse_args()
     engine = Engine()
     engine.initialize(args)
-except Exception as e:
+except Exception:
     exit(1)
 
 prompt = engine.build_outer_prompt()
