@@ -18,7 +18,6 @@ try:
     engine = Engine()
     engine.initialize(args)
 except Exception as e:
-    print(f"Engine initialization error: {e}", file=stderr)
     exit(1)
 
 prompt = engine.build_outer_prompt()
