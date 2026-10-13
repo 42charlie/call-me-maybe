@@ -17,7 +17,8 @@ try:
     args = parse_args()
     engine = Engine()
     engine.initialize(args)
-except Exception:
+except Exception as e:
+    print(f"Error: {e}")
     exit(1)
 
 prompt = engine.build_outer_prompt()

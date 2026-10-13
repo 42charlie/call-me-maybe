@@ -3,9 +3,10 @@
 import json
 from sys import stderr
 from os import makedirs, path
+from src.utils import format_validation_error
 from typing import Any
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from llm_sdk import Small_LLM_Model  # type: ignore
 from src.utils import is_valid_string_token
 from src.schemas import (FunctionCallResult, TestPromptFile, TestPromptList,
@@ -79,20 +80,45 @@ class Engine(BaseModel):
         """
         print("loading files...")
         try:
-            with open(args.funcs_def_path, "r") as file:
-                defs = json.loads(file.read())
+            with open(args.funcs_def_path, "r", encoding="utf-8") as file:
+                defs = json.load(file)
             self.tool_defs = FunctionDefinitionFile.validate_python(defs)
-        except Exception as e:
-            print(f"Failed to load function definitions: {e}", file=stderr)
-            raise e
+        except FileNotFoundError:
+            raise RuntimeError(
+                "Function definitions file not found:",
+                f"'{args.funcs_def_path}'"
+            )
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                "Invalid JSON in function definitions file",
+                f"('{args.funcs_def_path}', line {e.lineno}): {e.msg}"
+            )
+        except ValidationError as e:
+            raise RuntimeError(
+                "Schema error in function definitions",
+                f"('{args.funcs_def_path}'): {format_validation_error(e)}"
+            )
 
+        # 2. Input test prompts file
         try:
-            with open(args.in_path, "r") as file:
-                prompts = json.loads(file.read())
+            with open(args.in_path, "r", encoding="utf-8") as file:
+                prompts = json.load(file)
             self.test_prompts = TestPromptFile.validate_python(prompts)
-        except Exception as e:
-            print(f"Failed to load input tests: {e}", file=stderr)
-            raise e
+        except FileNotFoundError:
+            raise RuntimeError(
+                "Test prompts file not found:",
+                f"'{args.in_path}'"
+            )
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                "Invalid JSON in test prompts file",
+                f"('{args.in_path}', line {e.lineno}): {e.msg}"
+            )
+        except ValidationError as e:
+            raise RuntimeError(
+                "Schema error in test prompts",
+                f"('{args.in_path}'): {format_validation_error(e)}"
+            )
 
         # Store normalized path without truncating file prematurely
         self.outfile = path.normpath(args.out_path)
