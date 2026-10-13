@@ -182,6 +182,7 @@ class Engine(BaseModel):
         Returns:
             list[int]: Updated input IDs with selected function name.
         """
+        print("selecting function...")
         tree = self.functions_token_tree
         while True:
             if 'func_def' in tree:
