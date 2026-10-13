@@ -34,18 +34,15 @@ InParameterSchema = dict[str, Parameter]  # name: type
 
 # define constrained string types
 NonEmptyPrompt = Annotated[
-    str, StringConstraints(min_length=1,
-                           max_length=2000,
+    str, StringConstraints(max_length=2000,
                            strip_whitespace=True)
 ]
 NonEmptyName = Annotated[
-    str, StringConstraints(min_length=1,
-                           max_length=60,
+    str, StringConstraints(max_length=60,
                            strip_whitespace=True)
 ]
 NonEmptyDescription = Annotated[
-    str, StringConstraints(min_length=10,
-                           max_length=500,
+    str, StringConstraints(max_length=500,
                            strip_whitespace=True)
 ]
 
