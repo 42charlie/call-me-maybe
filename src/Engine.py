@@ -340,9 +340,14 @@ class Engine(BaseModel):
             current_num_str += self.id_to_token.get(chosen, "")
             subtoken += 1
 
-        # If it's a 'number' and no '.' was typed, append '.0' tokens into the stream
-        if allow_float and "." not in current_num_str and any(c.isdigit() for c in current_num_str):
-            dot_zero_tokens = [int(t) for t in self.model.encode(".0").flatten().tolist()]
+        # if it's a 'number' and no '.' was typed, append '.0' to stream
+        if (
+            allow_float
+            and "." not in current_num_str
+            and any(c.isdigit() for c in current_num_str)
+        ):
+            dot_zero_tokens = [int(t) for t in self.model
+                               .encode(".0").flatten().tolist()]
             input_ids.extend(dot_zero_tokens)
 
         return input_ids
@@ -377,7 +382,7 @@ class Engine(BaseModel):
         input_ids.append(chosen)
         token_str = self.id_to_token.get(chosen, "")
 
-        # Check if the opening token already closed the string (e.g., '""' or '""\n')
+        # Check if the opening token already closed the string
         quote_count = token_str.count('"')
         if quote_count >= 2:
             return input_ids
@@ -406,7 +411,8 @@ class Engine(BaseModel):
                 prefix = token_str[:quote_idx]
                 if prefix:
                     prefix_ids = [
-                        int(t) for t in self.model.encode(prefix).flatten().tolist()
+                        int(t) for t in self.model
+                        .encode(prefix).flatten().tolist()
                     ]
                     input_ids.extend(prefix_ids)
                 input_ids.append(quote_id)
@@ -452,7 +458,9 @@ class Engine(BaseModel):
                 input_ids = self._decode_boolean_param(input_ids)
             elif param_info.type in ("number", "integer"):
                 allow_float = (param_info.type == "number")
-                input_ids = self._decode_number_param(input_ids, sep_id, allow_float=allow_float)
+                input_ids = self._decode_number_param(
+                    input_ids, sep_id, allow_float=allow_float
+                    )
             elif param_info.type == "string":
                 input_ids = self._decode_string_param(input_ids)
 
