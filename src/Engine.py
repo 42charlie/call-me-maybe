@@ -361,31 +361,56 @@ class Engine(BaseModel):
         subtoken = 0
         quote_id = self.token_to_id['"']
 
+        # 1. Step 0: Must start with a token containing an opening quote
+        opening_tokens = [
+            _id for _id in self.valid_string_token_ids
+            if '"' in self.id_to_token.get(_id, "")
+        ]
+
+        logits = self.model.get_logits_from_input_ids(input_ids)
+        logits_arr = np.array(logits, dtype=np.float32)
+
+        masked_logits = np.full_like(logits_arr, -np.inf)
+        masked_logits[opening_tokens] = logits_arr[opening_tokens]
+
+        chosen = int(np.argmax(masked_logits))
+        input_ids.append(chosen)
+        token_str = self.id_to_token.get(chosen, "")
+
+        # Check if the opening token already closed the string (e.g., '""' or '""\n')
+        quote_count = token_str.count('"')
+        if quote_count >= 2:
+            return input_ids
+
+        # 2. Step 1+: Sample printable tokens until closing quote
+        subtoken = 1
         while subtoken < max_tokens:
             logits = self.model.get_logits_from_input_ids(input_ids)
             logits_arr = np.array(logits, dtype=np.float32)
 
             valid_tokens = list(self.valid_string_token_ids)
-            if subtoken > 0:
-                valid_tokens.append(quote_id)
+            valid_tokens.append(quote_id)
 
-            # Set all non-valid string tokens to -inf
             masked_logits = np.full_like(logits_arr, -np.inf)
             masked_logits[valid_tokens] = logits_arr[valid_tokens]
 
             chosen = int(np.argmax(masked_logits))
             token_str = self.id_to_token.get(chosen, "")
 
+            if chosen == quote_id:
+                input_ids.append(quote_id)
+                return input_ids
+
             if '"' in token_str:
                 quote_idx = token_str.index('"')
                 prefix = token_str[:quote_idx]
                 if prefix:
                     prefix_ids = [
-                        int(t) for t in self.model.
-                        encode(prefix).flatten().tolist()
+                        int(t) for t in self.model.encode(prefix).flatten().tolist()
                     ]
                     input_ids.extend(prefix_ids)
-                break
+                input_ids.append(quote_id)
+                return input_ids
 
             input_ids.append(chosen)
             subtoken += 1
@@ -417,10 +442,7 @@ class Engine(BaseModel):
             is_last = (idx == len(params_list) - 1)
             sep_id = self.brace_token_id if is_last else self.comma_token_id
 
-            if param_info.type == "string":
-                prefix = f'"{param_name}": "'
-            else:
-                prefix = f'"{param_name}":'
+            prefix = f'"{param_name}":'
             prefix_ids = [
                 int(t) for t in self.model.encode(prefix).flatten().tolist()
             ]
