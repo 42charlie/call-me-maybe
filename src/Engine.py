@@ -283,15 +283,13 @@ class Engine(BaseModel):
             self,
             input_ids: list[int],
             sep_token_id: int,
-            max_tokens: int = 16,
-            allow_float: bool = True) -> list[int]:
+            max_tokens: int = 16) -> list[int]:
         """Sample a numeric value by masking logits until a separator.
 
         Args:
             input_ids: Token sequence generated so far.
             sep_token_id: Token ID indicating end of numeric input.
             max_tokens: Maximum number of tokens to generate.
-            allow_float: Whether to allow floating-point numbers.
 
         Returns:
             list[int]: Updated input IDs with numeric tokens.
@@ -317,7 +315,7 @@ class Engine(BaseModel):
                         continue
 
                 # '.' can only appear once
-                if "." in stripped and (has_dot or not allow_float):
+                if "." in stripped and has_dot:
                     continue
 
                 step_valid_tokens.append(_id)
@@ -342,8 +340,7 @@ class Engine(BaseModel):
 
         # if it's a 'number' and no '.' was typed, append '.0' to stream
         if (
-            allow_float
-            and "." not in current_num_str
+            "." not in current_num_str
             and any(c.isdigit() for c in current_num_str)
         ):
             dot_zero_tokens = [int(t) for t in self.model
@@ -457,9 +454,8 @@ class Engine(BaseModel):
             if param_info.type == "boolean":
                 input_ids = self._decode_boolean_param(input_ids)
             elif param_info.type in ("number", "integer"):
-                allow_float = (param_info.type == "number")
                 input_ids = self._decode_number_param(
-                    input_ids, sep_id, allow_float=allow_float
+                    input_ids, sep_id
                     )
             elif param_info.type == "string":
                 input_ids = self._decode_string_param(input_ids)

@@ -6,6 +6,8 @@ prompts, and writes function-call results to the output file.
 
 import time
 from sys import exit, stderr
+
+from pydantic import ValidationError
 from src.utils import parse_args, format_validation_error
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
@@ -32,11 +34,30 @@ for test in engine.test_prompts:
     func_call = engine.model.decode(input_ids[json_start_index:])
     try:
         vfunc_call = FunctionCallResult.model_validate_json(func_call)
+        if engine.current_func:
+            for p_name, p_val in vfunc_call.parameters.items():
+                p_spec = engine.current_func.parameters.get(p_name)
+                if p_spec:
+                    if (
+                        p_spec.type == "integer" and
+                        isinstance(p_val, (int, float))
+                    ):
+                        vfunc_call.parameters[p_name] = int(p_val)
+                    elif (
+                        p_spec.type == "number" and
+                        isinstance(p_val, (int, float))
+                    ):
+                        vfunc_call.parameters[p_name] = float(p_val)
         output.append(vfunc_call)
-    except Exception as e:
+    except ValidationError as e:
         print(
             "warning: failed to parse function call for",
             f"`{test.prompt}`: {format_validation_error(e)}", file=stderr
+            )
+    except Exception as e:
+        print(
+            "warning: failed to parse function call for",
+            f"`{test.prompt}`: {e}", file=stderr
             )
 end = time.perf_counter()
 print(f"Execution time: {end - start:.2f} seconds")
