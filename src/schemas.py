@@ -24,9 +24,9 @@ class Parameter(BaseModel):
     """A parameter type descriptor.
 
     Attributes:
-        type: One of "string", "number", or "boolean".
+        type: One of "string", "number", "boolean", or "integer".
     """
-    type: Literal["string", "number", "boolean"]
+    type: Literal["string", "number", "boolean", "integer"]
 
 
 InParameterSchema = dict[str, Parameter]  # name: type
