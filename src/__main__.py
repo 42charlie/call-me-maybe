@@ -6,7 +6,7 @@ prompts, and writes function-call results to the output file.
 
 import time
 from sys import exit, stderr
-from src.utils import parse_args
+from src.utils import parse_args, format_validation_error
 from src.Engine import Engine
 from src.schemas import FunctionCallResult
 
@@ -36,7 +36,7 @@ for test in engine.test_prompts:
     except Exception as e:
         print(
             "warning: failed to parse function call for",
-            f"`{test.prompt}`: {e}", file=stderr
+            f"`{test.prompt}`: {format_validation_error(e)}", file=stderr
             )
 end = time.perf_counter()
 print(f"Execution time: {end - start:.2f} seconds")
