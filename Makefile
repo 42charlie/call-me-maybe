@@ -2,7 +2,7 @@ PYTHON          = python
 PACKAGE_MANAGER = uv
 RUNNER          = $(PACKAGE_MANAGER) run
 SRC_DIR         = src
-CACHE_DIRS      = __pycache__ $(SRC_DIR)/__pycache__ .mypy_cache
+CACHE_DIRS      = __pycache__ $(SRC_DIR)/__pycache__ .mypy_cache data/output llm_sdk/llm_sdk/__pycache__
 FLAGS           = --warn-return-any \
                         --warn-unused-ignores \
                         --ignore-missing-imports \
