@@ -34,7 +34,10 @@ for test in engine.test_prompts:
         vfunc_call = FunctionCallResult.model_validate_json(func_call)
         output.append(vfunc_call)
     except Exception as e:
-        print(f"warning: failed to parse function call for `{test.prompt}`: {e}", file=stderr)
+        print(
+            "warning: failed to parse function call for",
+            f"`{test.prompt}`: {e}", file=stderr
+            )
 end = time.perf_counter()
 print(f"Execution time: {end - start:.2f} seconds")
 

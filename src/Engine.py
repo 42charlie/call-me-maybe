@@ -1,7 +1,6 @@
 """Function-calling engine: loads files/vocab and generates tool calls."""
 
 import json
-from sys import stderr
 from os import makedirs, path
 from src.utils import format_validation_error
 from typing import Any
@@ -89,17 +88,18 @@ class Engine(BaseModel):
             )
         except json.JSONDecodeError as e:
             raise RuntimeError(
-                "Invalid JSON in function definitions file"+
+                "Invalid JSON in function definitions file" +
                 f"('{args.funcs_def_path}', line {e.lineno}): {e.msg}"
             )
         except ValidationError as e:
             raise RuntimeError(
-                "Schema error in function definitions"+
+                "Schema error in function definitions" +
                 f"('{args.funcs_def_path}'): {format_validation_error(e)}"
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to load function definitions file '{args.funcs_def_path}': {e}"
+                "Failed to load function definitions file" +
+                f"('{args.funcs_def_path}'): {e}"
             )
 
         # 2. Input test prompts file
@@ -113,12 +113,12 @@ class Engine(BaseModel):
             )
         except json.JSONDecodeError as e:
             raise RuntimeError(
-                "Invalid JSON in test prompts file"+
+                "Invalid JSON in test prompts file" +
                 f"('{args.in_path}', line {e.lineno}): {e.msg}"
             )
         except ValidationError as e:
             raise RuntimeError(
-                "Schema error in test prompts"+
+                "Schema error in test prompts" +
                 f"('{args.in_path}'): {format_validation_error(e)}"
             )
         except Exception as e:
@@ -464,5 +464,6 @@ class Engine(BaseModel):
             )
         except Exception as e:
             raise RuntimeError(
-                f"Unexpected error while saving output file '{self.outfile}': {e}"
+                "Unexpected error while saving output file" +
+                f" '{self.outfile}': {e}"
             )
